@@ -276,7 +276,7 @@ export default class SchemaTable extends LitElement {
     }
 
     // For Primitive Data types
-    const [type, readOrWriteOnly, constraint, defaultValue, allowedValues, pattern, schemaDescription, schemaTitle, deprecated] = data.split('~|~');
+    const [type, readOrWriteOnly, constant, constraint, defaultValue, allowedValues, pattern, schemaDescription, schemaTitle, deprecated] = data.split('~|~');
     if (readOrWriteOnly === '🆁' && this.schemaHideReadOnly === 'true') {
       return;
     }
@@ -322,6 +322,7 @@ export default class SchemaTable extends LitElement {
                 : ''}`
               : ''
           }
+          ${constant ? html`<div style='display:inline-block; line-break:anywhere; margin-right:8px;'> <span class='bold-text'>Const: </span> ${constant}</div>` : ''}
           ${constraint ? html`<div style='display:inline-block; line-break:anywhere; margin-right:8px;'> <span class='bold-text'>Constraints: </span> ${constraint}</div>` : ''}
           ${defaultValue ? html`<div style='display:inline-block; line-break:anywhere; margin-right:8px;'> <span class='bold-text'>Default: </span>${defaultValue}</div>` : ''}
           ${allowedValues ? html`<div style='display:inline-block; line-break:anywhere; margin-right:8px;'> <span class='bold-text'>Allowed: </span>${allowedValues}</div>` : ''}

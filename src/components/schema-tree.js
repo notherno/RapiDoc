@@ -282,7 +282,7 @@ export default class SchemaTree extends LitElement {
     }
 
     // For Primitive types and array of Primitives
-    const [type, primitiveReadOrWrite, constraint, defaultValue, allowedValues, pattern, schemaDescription, schemaTitle, deprecated] = data.split('~|~');
+    const [type, primitiveReadOrWrite, constant, constraint, defaultValue, allowedValues, pattern, schemaDescription, schemaTitle, deprecated] = data.split('~|~');
     if (primitiveReadOrWrite === '🆁' && this.schemaHideReadOnly === 'true') {
       return;
     }
@@ -331,11 +331,12 @@ export default class SchemaTree extends LitElement {
               ${unsafeHTML(marked(`${schemaTitle ? `**${schemaTitle}:**` : ''} ${schemaDescription} ${constraint || defaultValue || allowedValues || pattern ? '<span class="more-content">⤵</span>' : ''}`))}
               </span>`
             : schemaTitle
-              ? html`${schemaTitle} ${constraint || defaultValue || allowedValues || pattern
+              ? html`${schemaTitle} ${constraint || defaultValue || allowedValues || pattern || constant
                 ? html`<span class="more-content">⤵</span>`
                 : ''}`
               : ''
           }
+          ${constant ? html`<div style='display:inline-block; line-break:anywhere; margin-right:8px'><span class='bold-text'>Const: </span>${constant}</div>` : ''}
           ${constraint ? html`<div style='display:inline-block; line-break:anywhere; margin-right:8px'><span class='bold-text'>Constraints: </span>${constraint}</div>` : ''}
           ${defaultValue ? html`<div style='display:inline-block; line-break:anywhere; margin-right:8px'><span class='bold-text'>Default: </span>${defaultValue}</div>` : ''}
           ${allowedValues ? html`<div style='display:inline-block; line-break:anywhere; margin-right:8px'><span class='bold-text'>Allowed: </span>${allowedValues}</div>` : ''}
