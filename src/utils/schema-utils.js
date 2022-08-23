@@ -34,6 +34,7 @@ export function getTypeInfo(schema) {
     examples: schema.examples || schema.example,
     default: schema.default != null ? `${schema.default}` : '',
     description: schema.description || '',
+    constant: schema.const !== undefined ? JSON.stringify(schema.const) : '',
     constrain: '',
     allowedValues: '',
     arrayType: '',
@@ -77,7 +78,7 @@ export function getTypeInfo(schema) {
     }
   }
   info.constrain = constrain;
-  info.html = `${info.type}~|~${info.readOrWriteOnly}~|~${info.constrain}~|~${info.default}~|~${info.allowedValues}~|~${info.pattern}~|~${info.description}~|~${schema.title || ''}~|~${info.deprecated ? 'deprecated' : ''}`;
+  info.html = `${info.type}~|~${info.readOrWriteOnly}~|~${info.constant}~|~${info.constrain}~|~${info.default}~|~${info.allowedValues}~|~${info.pattern}~|~${info.description}~|~${schema.title || ''}~|~${info.deprecated ? 'deprecated' : ''}`;
   return info;
 }
 export function nestExampleIfPresent(example) {
@@ -144,12 +145,21 @@ export function anyExampleWithSummaryOrDescription(examples) {
   return examples.some((x) => x.summary?.length > 0 || x.description?.length > 0);
 }
 
-export function getSampleValueByType(schemaObj) {
-  const example = schemaObj.examples
+function getExample(schemaObj) {
+  if (schemaObj == null) {
+    return undefined;
+  }
+
+  return schemaObj.examples
     ? schemaObj.examples[0]
     : schemaObj.example === null
       ? null
       : schemaObj.example || undefined;
+}
+
+export function getSampleValueByType(schemaObj) {
+  const example = getExample(schemaObj);
+
   if (example === '') { return ''; }
   if (example === null) { return null; }
   if (example === 0) { return 0; }
@@ -158,6 +168,12 @@ export function getSampleValueByType(schemaObj) {
   if (Object.keys(schemaObj).length === 0) {
     return null;
   }
+
+  if (schemaObj.const) {
+    // If the schema is a constant, just return the value
+    return schemaObj.const;
+  }
+
   if (schemaObj.$ref) {
     // Indicates a Circular ref
     return schemaObj.$ref;
@@ -327,6 +343,8 @@ export function schemaToSampleObj(schema, config = { }) {
     return;
   }
 
+  const schemaExample = getExample(schema);
+
   if (schema.allOf) {
     const objWithAllProps = {};
 
@@ -463,20 +481,22 @@ export function schemaToSampleObj(schema, config = { }) {
   } else if (schema.type === 'object' || schema.properties) {
     obj['example-0'] = {};
     addSchemaInfoToExample(schema, obj['example-0']);
-    if (schema.example) {
-      obj['example-0'] = schema.example;
+    if (schemaExample) {
+      obj['example-0'] = schemaExample;
     } else {
       for (const propertyName in schema.properties) {
-        if (schema.properties[propertyName]?.deprecated && !config.includeDeprecated) { continue; }
-        if (schema.properties[propertyName]?.readOnly && !config.includeReadOnly) { continue; }
-        if (schema.properties[propertyName]?.writeOnly && !config.includeWriteOnly) { continue; }
-        if (schema.properties[propertyName]?.type === 'array' || schema.properties[propertyName]?.items) {
-          if (schema.properties[propertyName].example) {
-            addPropertyExampleToObjectExamples(schema.properties[propertyName].example, obj, propertyName);
-          } else if (schema.properties[propertyName]?.items?.example) { // schemas and properties support single example but not multiple examples.
-            addPropertyExampleToObjectExamples([schema.properties[propertyName].items.example], obj, propertyName);
+        const property = schema.properties[propertyName];
+
+        if (property?.deprecated && !config.includeDeprecated) { continue; }
+        if (property?.readOnly && !config.includeReadOnly) { continue; }
+        if (property?.writeOnly && !config.includeWriteOnly) { continue; }
+        if (property?.type === 'array' || schema.properties[propertyName]?.items) {
+          if (getExample(property)) {
+            addPropertyExampleToObjectExamples(getExample(property), obj, propertyName);
+          } else if (getExample(property?.items)) { // schemas and properties support single example but not multiple examples.
+            addPropertyExampleToObjectExamples([getExample(property.items)], obj, propertyName);
           } else {
-            const itemSamples = schemaToSampleObj(schema.properties[propertyName].items, config);
+            const itemSamples = schemaToSampleObj(property.items, config);
             const arraySamples = [];
             for (const key in itemSamples) {
               arraySamples[key] = [itemSamples[key]];
@@ -485,15 +505,15 @@ export function schemaToSampleObj(schema, config = { }) {
           }
           continue;
         }
-        obj = mergePropertyExamples(obj, propertyName, schemaToSampleObj(schema.properties[propertyName], config));
+        obj = mergePropertyExamples(obj, propertyName, schemaToSampleObj(property, config));
       }
     }
   } else if (schema.type === 'array' || schema.items) {
-    if (schema.items || schema.example) {
-      if (schema.example) {
-        obj['example-0'] = schema.example;
-      } else if (schema.items?.example) { // schemas and properties support single example but not multiple examples.
-        obj['example-0'] = [schema.items.example];
+    if (schema.items || schemaExample) {
+      if (schemaExample) {
+        obj['example-0'] = schemaExample;
+      } else if (getExample(schema.items)) { // schemas and properties support single example but not multiple examples.
+        obj['example-0'] = [getExample(schema.items)];
       } else {
         const samples = schemaToSampleObj(schema.items, config);
         let i = 0;
@@ -542,14 +562,18 @@ function generateMarkdownForArrayAndObjectDescription(schema, level = 0) {
  * For changing OpenAPI-Schema to an Object Notation,
  * This Object would further be an input to UI Components to generate an Object-Tree
  * @param {object} schema - Schema object from OpenAPI spec
- * @param {object} obj - recursivly pass this object to generate object notation
+ * @param {object} obj - recursively pass this object to generate object notation
  * @param {number} level - recursion level
- * @param {string} suffix - used for suffixing property names to avoid duplicate props during object composion
+ * @param {string} suffix - used for suffixing property names to avoid duplicate props during object composition
  */
 export function schemaInObjectNotation(schema, obj, level = 0, suffix = '') {
   if (!schema) {
     return;
   }
+  if ('const' in schema) {
+    obj['::const'] = schema.const;
+  }
+
   if (schema.allOf) {
     const objWithAllProps = {};
     if (schema.allOf.length === 1 && !schema.allOf[0].properties && !schema.allOf[0].items) {
@@ -648,7 +672,7 @@ export function schemaInObjectNotation(schema, obj, level = 0, suffix = '') {
       // Generate ONE-OF options for complexTypes
       complexTypes.forEach((v, i) => {
         if (v === 'null') {
-          multiTypeOptions[`::OPTION~${i + 1}`] = 'NULL~|~~|~~|~~|~~|~~|~~|~~|~';
+          multiTypeOptions[`::OPTION~${i + 1}`] = 'NULL~|~~|~~|~~|~~|~~|~~|~~|~~|~';
         } else if ('integer, number, string, boolean,'.includes(`${v},`)) {
           subSchema.type = Array.isArray(v) ? v.join('┃') : v;
           const primitiveTypeInfo = getTypeInfo(subSchema);
